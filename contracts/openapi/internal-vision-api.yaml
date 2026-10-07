@@ -1,0 +1,350 @@
+openapi: 3.1.0
+info:
+  title: Identity Onboarding Lab — Internal Vision Service Contract
+  version: 1.0.0
+  description: Internal HTTP contract between Java backend and Python vision service. Bound to private container network.
+paths:
+  /health/live:
+    get:
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service process alive
+  /health/ready:
+    get:
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Dependencies and models ready
+  /v1/capabilities:
+    get:
+      summary: Installed vision model manifests and hardware status
+      responses:
+        '200':
+          description: Capabilities report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityReport'
+
+  /v1/nic/extract:
+    post:
+      summary: Extract card text, layout, quality, and document portrait
+      security:
+        - InternalServiceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NicExtractionRequest'
+      responses:
+        '200':
+          description: Extracted fields, quality metrics, and portrait reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NicExtractionResponse'
+
+  /v1/biometrics/analyze:
+    post:
+      summary: Analyze temporal camera challenge video and passive anti-spoofing
+      security:
+        - InternalServiceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BiometricAnalysisRequest'
+      responses:
+        '200':
+          description: Movement compliance, temporal validation, best frame, and PAD score
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiometricAnalysisResponse'
+
+  /v1/faces/compare:
+    post:
+      summary: Compare document portrait against live best frame
+      security:
+        - InternalServiceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FaceComparisonRequest'
+      responses:
+        '200':
+          description: Face comparison similarity score and experimental verdict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaceComparisonResponse'
+
+components:
+  securitySchemes:
+    InternalServiceAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Vision-Secret
+
+  schemas:
+    CapabilityReport:
+      type: object
+      properties:
+        ocr:
+          type: object
+          properties:
+            engine:
+              type: string
+            installedLanguages:
+              type: array
+              items:
+                type: string
+            status:
+              type: string
+              enum: [READY, UNAVAILABLE]
+        portraitDetection:
+          type: object
+          properties:
+            engine:
+              type: string
+            status:
+              type: string
+        liveness:
+          type: object
+          properties:
+            movementAnalysis:
+              type: string
+            padStatus:
+              type: string
+              enum: [AVAILABLE, UNKNOWN, UNAVAILABLE]
+        faceMatching:
+          type: object
+          properties:
+            model:
+              type: string
+            version:
+              type: string
+
+    NicExtractionRequest:
+      type: object
+      required: [requestId, jobId, applicationId, generation, frontStorageKey, backStorageKey]
+      properties:
+        requestId:
+          type: string
+        jobId:
+          type: string
+          format: uuid
+        applicationId:
+          type: string
+          format: uuid
+        generation:
+          type: integer
+        frontStorageKey:
+          type: string
+        backStorageKey:
+          type: string
+        requestedScripts:
+          type: array
+          items:
+            type: string
+          default: [eng, sin, tam]
+
+    NicExtractionResponse:
+      type: object
+      required: [requestId, generation, executionMode, status, document, fields, portrait, warnings, provider]
+      properties:
+        requestId:
+          type: string
+        generation:
+          type: integer
+        executionMode:
+          type: string
+          enum: [REAL, REAL_EXPERIMENTAL, MOCKED, UNAVAILABLE]
+        status:
+          type: string
+          enum: [PASS, FAIL, INCONCLUSIVE, ERROR]
+        document:
+          type: object
+          properties:
+            layout:
+              type: string
+              enum: [OLD_NIC, NEW_NIC, UNKNOWN]
+            quality:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [PASS, FAIL, WARNING]
+                blurScore:
+                  type: number
+                  nullable: true
+                glareDetected:
+                  type: boolean
+        fields:
+          type: object
+          properties:
+            nicNumber:
+              $ref: '#/components/schemas/ExtractedField'
+            fullName:
+              $ref: '#/components/schemas/ExtractedField'
+            dateOfBirth:
+              $ref: '#/components/schemas/ExtractedField'
+            gender:
+              $ref: '#/components/schemas/ExtractedField'
+            address:
+              $ref: '#/components/schemas/ExtractedField'
+        portrait:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [FOUND, NOT_FOUND, MULTIPLE_FACES, LOW_QUALITY]
+            portraitStorageKey:
+              type: string
+              nullable: true
+        warnings:
+          type: array
+          items:
+            type: string
+        provider:
+          type: object
+          properties:
+            name:
+              type: string
+            version:
+              type: string
+
+    ExtractedField:
+      type: object
+      properties:
+        value:
+          type: string
+          nullable: true
+        confidence:
+          type: number
+          nullable: true
+        source:
+          type: string
+          enum: [OCR, RULE_DERIVED, RAW]
+        script:
+          type: string
+          nullable: true
+
+    BiometricAnalysisRequest:
+      type: object
+      required: [attemptId, applicationId, generation, videoStorageKey, expectedChallengeSteps, nonce]
+      properties:
+        attemptId:
+          type: string
+          format: uuid
+        applicationId:
+          type: string
+          format: uuid
+        generation:
+          type: integer
+        videoStorageKey:
+          type: string
+        expectedChallengeSteps:
+          type: array
+          items:
+            type: string
+        nonce:
+          type: string
+
+    BiometricAnalysisResponse:
+      type: object
+      required: [attemptId, executionMode, status, challengeOutcome, padOutcome, bestFrameStorageKey]
+      properties:
+        attemptId:
+          type: string
+          format: uuid
+        executionMode:
+          type: string
+          enum: [REAL_EXPERIMENTAL, MOCKED, UNAVAILABLE]
+        status:
+          type: string
+          enum: [PASS, FAIL, INCONCLUSIVE, ERROR]
+        durationSeconds:
+          type: number
+        challengeOutcome:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [PASS, FAIL, INCONCLUSIVE]
+            stepsCompleted:
+              type: array
+              items:
+                type: string
+        padOutcome:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [PASS, FAIL, UNKNOWN, UNAVAILABLE]
+            score:
+              type: number
+              nullable: true
+            scoreType:
+              type: string
+              nullable: true
+            provider:
+              type: string
+        bestFrameStorageKey:
+          type: string
+          nullable: true
+        warnings:
+          type: array
+          items:
+            type: string
+
+    FaceComparisonRequest:
+      type: object
+      required: [requestId, portraitStorageKey, liveFrameStorageKey, calibratedThreshold]
+      properties:
+        requestId:
+          type: string
+        portraitStorageKey:
+          type: string
+        liveFrameStorageKey:
+          type: string
+        calibratedThreshold:
+          type: number
+          default: 0.65
+
+    FaceComparisonResponse:
+      type: object
+      required: [requestId, executionMode, status, score, scoreType, threshold, provider]
+      properties:
+        requestId:
+          type: string
+        executionMode:
+          type: string
+          enum: [REAL_EXPERIMENTAL, MOCKED, UNAVAILABLE]
+        status:
+          type: string
+          enum: [PASS, FAIL, INCONCLUSIVE, ERROR]
+        score:
+          type: number
+          nullable: true
+        scoreType:
+          type: string
+          example: "COSINE_SIMILARITY"
+        threshold:
+          type: number
+        provider:
+          type: object
+          properties:
+            name:
+              type: string
+            version:
+              type: string
+        warnings:
+          type: array
+          items:
+            type: string

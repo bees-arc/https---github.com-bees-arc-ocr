@@ -1,0 +1,710 @@
+openapi: 3.1.0
+info:
+  title: Identity Onboarding Lab — Public API
+  version: 1.0.0
+  description: Public HTTP API contract for Sri Lankan investment customer onboarding and reviewer staff operations.
+paths:
+  /auth/otp/request:
+    post:
+      summary: Request contact-bound OTP challenge
+      operationId: requestOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contactLookup]
+              properties:
+                contactLookup:
+                  type: string
+                  example: "+94771234567"
+      responses:
+        '200':
+          description: OTP challenge issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  challengeId:
+                    type: string
+                    format: uuid
+                  expiresInSeconds:
+                    type: integer
+                    example: 300
+                  demoCodeHint:
+                    type: string
+                    nullable: true
+                    description: Populated only in local demo mode when test provider is active
+        '429':
+          description: Rate limit exceeded
+
+  /auth/otp/verify:
+    post:
+      summary: Verify OTP and create applicant session
+      operationId: verifyOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, otpCode]
+              properties:
+                challengeId:
+                  type: string
+                  format: uuid
+                otpCode:
+                  type: string
+                  example: "123456"
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                  userId:
+                    type: string
+                    format: uuid
+                  token:
+                    type: string
+                  role:
+                    type: string
+                    example: "APPLICANT"
+
+  /auth/staff/login:
+    post:
+      summary: Staff reviewer and admin authentication
+      operationId: staffLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Authenticated staff session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                  userId:
+                    type: string
+                    format: uuid
+                  token:
+                    type: string
+                  role:
+                    type: string
+                    enum: [REVIEWER, ADMIN, AUDITOR]
+
+  /applications:
+    post:
+      summary: Create resumable onboarding draft
+      operationId: createApplication
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Application draft created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+
+  /applications/{id}:
+    get:
+      summary: Fetch application state and next action
+      operationId: getApplication
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Application details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+
+  /applications/{id}/details:
+    patch:
+      summary: Update applicant customer details with optimistic version guard
+      operationId: updateDetails
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, fullName, dateOfBirth, addressLine]
+              properties:
+                expectedVersion:
+                  type: integer
+                fullName:
+                  type: string
+                dateOfBirth:
+                  type: string
+                  format: date
+                addressLine:
+                  type: string
+                employmentStatus:
+                  type: string
+                sourceOfFunds:
+                  type: string
+                taxResidency:
+                  type: string
+                pepDeclaration:
+                  type: boolean
+      responses:
+        '200':
+          description: Details updated
+        '409':
+          description: Stale version conflict
+
+  /applications/{id}/consents:
+    post:
+      summary: Record acceptance of versioned consent
+      operationId: recordConsent
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consentType, version, accepted]
+              properties:
+                consentType:
+                  type: string
+                  enum: [IDENTITY_VERIFICATION, OPTIONAL_COMMUNICATION]
+                version:
+                  type: string
+                accepted:
+                  type: boolean
+      responses:
+        '200':
+          description: Consent recorded
+
+  /applications/{id}/nic:
+    post:
+      summary: Upload NIC front and back images
+      operationId: uploadNic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [frontImage, backImage, expectedVersion]
+              properties:
+                frontImage:
+                  type: string
+                  format: binary
+                backImage:
+                  type: string
+                  format: binary
+                expectedVersion:
+                  type: integer
+      responses:
+        '202':
+          description: Upload accepted and async OCR job dispatched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    format: uuid
+                  generation:
+                    type: integer
+    get:
+      summary: Get extracted NIC fields for current generation
+      operationId: getNicExtraction
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Extracted fields and image quality assessment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NicExtractionResponse'
+
+  /applications/{id}/nic/confirm:
+    post:
+      summary: Confirm or correct extracted NIC fields
+      operationId: confirmNic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, nicNumber, fullName, dateOfBirth, gender]
+              properties:
+                expectedVersion:
+                  type: integer
+                nicNumber:
+                  type: string
+                fullName:
+                  type: string
+                dateOfBirth:
+                  type: string
+                  format: date
+                gender:
+                  type: string
+                  enum: [MALE, FEMALE]
+                address:
+                  type: string
+      responses:
+        '200':
+          description: Details confirmed
+
+  /applications/{id}/biometric/challenges:
+    post:
+      summary: Request single-use cryptographically random camera challenge
+      operationId: requestBiometricChallenge
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Challenge issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChallengeResponse'
+
+  /applications/{id}/biometric/attempts:
+    post:
+      summary: Submit recorded camera challenge video
+      operationId: submitBiometricAttempt
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [videoFile, challengeId, nonce, expectedVersion]
+              properties:
+                videoFile:
+                  type: string
+                  format: binary
+                challengeId:
+                  type: string
+                  format: uuid
+                nonce:
+                  type: string
+                expectedVersion:
+                  type: integer
+      responses:
+        '202':
+          description: Video accepted for processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    format: uuid
+                  attemptId:
+                    type: string
+                    format: uuid
+
+  /applications/{id}/checks:
+    get:
+      summary: Retrieve all verification checks and capability labels
+      operationId: getChecks
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Verification checks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VerificationCheck'
+
+  /applications/{id}/submit:
+    post:
+      summary: Submit application for final policy decision evaluation
+      operationId: submitApplication
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion:
+                  type: integer
+      responses:
+        '200':
+          description: Application evaluated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+
+  /applications/{id}/withdraw:
+    post:
+      summary: Applicant withdraws application
+      operationId: withdrawApplication
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Application withdrawn
+
+  /jobs/{id}:
+    get:
+      summary: Check status of asynchronous background job
+      operationId: getJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    format: uuid
+                  state:
+                    type: string
+                    enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+                  lastErrorCode:
+                    type: string
+                    nullable: true
+
+  /capabilities:
+    get:
+      summary: System capability matrix and active operating mode
+      operationId: getCapabilities
+      responses:
+        '200':
+          description: Capabilities metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  operatingMode:
+                    type: string
+                    example: "LOCAL_DEMO"
+                  ocrEngine:
+                    type: string
+                  livenessEngine:
+                    type: string
+                  padProviderStatus:
+                    type: string
+                    example: "UNKNOWN"
+                  faceModel:
+                    type: string
+
+  /staff/applications:
+    get:
+      summary: Reviewer queue of applications
+      operationId: getStaffQueue
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 0
+        - in: query
+          name: size
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of applications for review
+
+  /staff/applications/{id}:
+    get:
+      summary: Reviewer detail view with masked PII and extracted differences
+      operationId: getStaffApplicationDetail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Review case detail
+
+  /staff/applications/{id}/decision:
+    post:
+      summary: Reviewer records manual decision with mandatory reason
+      operationId: recordStaffDecision
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, decision, reason]
+              properties:
+                expectedVersion:
+                  type: integer
+                decision:
+                  type: string
+                  enum: [APPROVED, REJECTED, RECAPTURE_REQUIRED]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Decision updated
+
+  /staff/evidence/{evidenceId}:
+    get:
+      summary: Authorized streaming of protected evidence with access audit
+      operationId: streamEvidence
+      parameters:
+        - in: path
+          name: evidenceId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Binary media stream
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+            video/webm:
+              schema:
+                type: string
+                format: binary
+
+  /staff/audit:
+    get:
+      summary: Paginated append-only audit trail
+      operationId: getAuditLogs
+      responses:
+        '200':
+          description: Audit event logs
+
+components:
+  schemas:
+    ApplicationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lifecycle:
+          type: string
+          enum: [DRAFT, PROCESSING, READY_TO_SUBMIT, SUBMITTED, UNDER_REVIEW, COMPLETED, WITHDRAWN, REJECTED]
+        decision:
+          type: string
+          enum: [PENDING, RECAPTURE_REQUIRED, REVIEW_REQUIRED, DEMO_CHECKS_PASSED, APPROVED, REJECTED]
+        operatingMode:
+          type: string
+          enum: [LOCAL_DEMO, INSTITUTION]
+        version:
+          type: integer
+        currentDocumentGeneration:
+          type: integer
+        currentBiometricGeneration:
+          type: integer
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ChallengeResponse:
+      type: object
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        nonce:
+          type: string
+        steps:
+          type: array
+          items:
+            type: string
+            enum: [TURN_LEFT, TURN_RIGHT, BLINK]
+        expiresAt:
+          type: string
+          format: date-time
+
+    NicExtractionResponse:
+      type: object
+      properties:
+        layout:
+          type: string
+          enum: [OLD_NIC, NEW_NIC, UNKNOWN]
+        qualityStatus:
+          type: string
+          enum: [PASS, FAIL, WARNING]
+        extractedNicNumber:
+          type: string
+          nullable: true
+        extractedFullName:
+          type: string
+          nullable: true
+        extractedDob:
+          type: string
+          format: date
+          nullable: true
+        extractedGender:
+          type: string
+          nullable: true
+        warnings:
+          type: array
+          items:
+            type: string
+
+    VerificationCheck:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        checkType:
+          type: string
+        status:
+          type: string
+          enum: [NOT_RUN, PENDING, RUNNING, PASS, FAIL, INCONCLUSIVE, ERROR, UNAVAILABLE, UNSUPPORTED]
+        executionMode:
+          type: string
+          enum: [REAL, REAL_EXPERIMENTAL, MOCKED, UNAVAILABLE]
+        score:
+          type: number
+          nullable: true
+        scoreType:
+          type: string
+          nullable: true
+        threshold:
+          type: number
+          nullable: true
+        provider:
+          type: string
+        modelVersion:
+          type: string
+        reasonCodes:
+          type: array
+          items:
+            type: string

@@ -1,0 +1,56 @@
+# Identity Onboarding Lab — Git Ignore Rules
+
+# Environments and Secrets
+.env
+*.env.local
+*.key
+*.pem
+*.p12
+
+# Evidence Storage and Private Data
+storage/
+evidence/
+data/
+uploads/
+*.tmp
+
+# Java & Spring Boot
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+.idea/
+*.iml
+.vscode/
+
+# Python & Vision Service
+vision-service/__pycache__/
+vision-service/*/__pycache__/
+vision-service/*/*/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+vision-service/.venv/
+vision-service/venv/
+vision-service/models/*.onnx
+vision-service/models/*.bin
+vision-service/models/*.pt
+!vision-service/models/manifest.json
+
+# Frontend & Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+*.tsbuildinfo
+frontend/.npm/
+
+# Local tools
+tools/
+scratch/
+
+# OS specific
+.DS_Store
+Thumbs.db

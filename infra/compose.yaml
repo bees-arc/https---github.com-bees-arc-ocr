@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: onboarding-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-onboarding_db}
+      POSTGRES_USER: ${POSTGRES_USER:-onboarding_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword123}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onboarding_app} -d ${POSTGRES_DB:-onboarding_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  vision-service:
+    build:
+      context: ../vision-service
+      dockerfile: Dockerfile
+    container_name: onboarding-vision
+    environment:
+      - VISION_INTERNAL_SECRET=${VISION_INTERNAL_SECRET:-dev-internal-secret-at-least-32-chars-long}
+      - EVIDENCE_STORAGE_PATH=/var/evidence
+    volumes:
+      - evidence_data:/var/evidence
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: onboarding-backend
+    environment:
+      - APP_MODE=${APP_MODE:-LOCAL_DEMO}
+      - SERVER_PORT=8080
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-onboarding_db}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-onboarding_app}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-devpassword123}
+      - VISION_SERVICE_URL=http://vision-service:8000
+      - VISION_INTERNAL_SECRET=${VISION_INTERNAL_SECRET:-dev-internal-secret-at-least-32-chars-long}
+      - EVIDENCE_STORAGE_PATH=/var/evidence
+      - EVIDENCE_ENCRYPTION_KEY_HEX=${EVIDENCE_ENCRYPTION_KEY_HEX:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      - DATABASE_ENCRYPTION_KEY_HEX=${DATABASE_ENCRYPTION_KEY_HEX:-abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789}
+      - NIC_HMAC_SECRET_HEX=${NIC_HMAC_SECRET_HEX:-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef}
+      - ALLOWED_ORIGIN=${ALLOWED_ORIGIN:-http://localhost:3000}
+      - DEMO_OTP_ENABLED=${DEMO_OTP_ENABLED:-true}
+    ports:
+      - "8080:8080"
+    volumes:
+      - evidence_data:/var/evidence
+    depends_on:
+      postgres:
+        condition: service_healthy
+      vision-service:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: onboarding-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  evidence_data:

@@ -1,0 +1,57 @@
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: identity-onboarding-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:onboarding_db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 35MB
+      max-request-size: 40MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  mode: ${APP_MODE:LOCAL_DEMO}
+  storage:
+    path: ${EVIDENCE_STORAGE_PATH:./data/evidence}
+  crypto:
+    evidence-key-hex: ${EVIDENCE_ENCRYPTION_KEY_HEX:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+    database-key-hex: ${DATABASE_ENCRYPTION_KEY_HEX:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789}
+    nic-hmac-secret-hex: ${NIC_HMAC_SECRET_HEX:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef}
+  vision:
+    url: ${VISION_SERVICE_URL:http://localhost:8000}
+    secret: ${VISION_INTERNAL_SECRET:dev-internal-secret-at-least-32-chars-long}
+    timeout-ms: 15000
+  otp:
+    demo-enabled: ${DEMO_OTP_ENABLED:true}
+    demo-code: "123456"
+    expiry-seconds: 300
+  cors:
+    allowed-origin: ${ALLOWED_ORIGIN:http://localhost:3000}
+  bootstrap:
+    admin-username: ${BOOTSTRAP_ADMIN_USERNAME:staff.admin@identitylab.local}
+    admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:AdminDemo123!}

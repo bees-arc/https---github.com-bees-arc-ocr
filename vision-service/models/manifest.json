@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-10-07T00:00:00Z",
+  "models": {
+    "ocr": {
+      "engine": "Tesseract OCR",
+      "version": "5.x",
+      "languages": ["eng", "sin", "tam"],
+      "license": "Apache-2.0",
+      "sha256_sin": "980757d54bdf16a7bf59942a046cbbff660dd7cbfbe1897d8b5eb54bbd7c3857",
+      "sha256_tam": "f8a7e4369e88cb54e9e03d49e6f21774d6cce4281254ef859187317336cb883b",
+      "status": "CONFIGURED"
+    },
+    "portraitDetector": {
+      "model": "OpenCV Haar Frontal Face",
+      "version": "4.x",
+      "license": "Apache-2.0",
+      "status": "BUNDLED"
+    },
+    "liveness": {
+      "algorithm": "OpenCV Temporal Movement & Flow Analysis",
+      "version": "1.0.0",
+      "license": "Internal Apache-2.0 compatible",
+      "status": "REAL_EXPERIMENTAL"
+    },
+    "pad": {
+      "provider": "None",
+      "version": "none",
+      "license": "N/A",
+      "status": "UNKNOWN",
+      "notes": "No certified ISO 30107-3 PAD weights installed; reports UNKNOWN or UNAVAILABLE."
+    },
+    "faceComparison": {
+      "metric": "Cosine Similarity",
+      "version": "1.0.0",
+      "threshold": 0.65,
+      "license": "Apache-2.0",
+      "status": "REAL_EXPERIMENTAL"
+    }
+  }
+}
