@@ -60,6 +60,7 @@ public class JobWorker {
         this.encryptionService = encryptionService;
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @Scheduled(fixedDelay = 2000)
     public void pollAndExecute() {
         List<ProcessingJob> claimable = jobRepository.findClaimableJobs(OffsetDateTime.now());
@@ -79,7 +80,8 @@ public class JobWorker {
         }
     }
 
-    private void executeJob(ProcessingJob job) {
+    @org.springframework.transaction.annotation.Transactional
+    public void executeJob(ProcessingJob job) {
         Application application = applicationRepository.findById(job.getApplication().getId())
                 .orElseThrow(() -> new IllegalStateException("Application missing for job: " + job.getId()));
 

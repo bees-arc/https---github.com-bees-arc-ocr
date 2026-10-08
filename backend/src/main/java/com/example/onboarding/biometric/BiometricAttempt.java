@@ -13,22 +13,22 @@ public class BiometricAttempt {
     @Id
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "application_id", nullable = false)
     private Application application;
 
     @Column(nullable = false)
     private int generation;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "challenge_id", nullable = false)
     private CameraChallenge challenge;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "video_evidence_id")
     private EvidenceObject videoEvidence;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "best_frame_evidence_id")
     private EvidenceObject bestFrameEvidence;
 

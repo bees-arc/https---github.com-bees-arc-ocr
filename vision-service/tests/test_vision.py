@@ -1,16 +1,19 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import cv2
 import numpy as np
 import pytest
-from pathlib import Path
 from app.providers.quality_provider import assess_image_quality
 from app.providers.compare_provider import compare_face_images
 from app.core.config import resolve_storage_path
 
 def test_assess_image_quality_sharp():
-    # Create sharp synthetic gradient image
+    # Create sharp synthetic gradient image without extreme glare (>250)
     img = np.zeros((200, 300, 3), dtype=np.uint8)
     for i in range(0, 300, 10):
-        img[:, i:i+5] = 255
+        img[:, i:i+5] = 200
     _, enc = cv2.imencode(".jpg", img)
     result = assess_image_quality(enc.tobytes())
     assert result["status"] == "PASS"

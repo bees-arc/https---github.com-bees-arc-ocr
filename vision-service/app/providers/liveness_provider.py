@@ -85,9 +85,14 @@ def analyze_video_liveness(video_path: Path, expected_steps: list[str], storage_
     best_frame_key = None
     if best_frame is not None:
         best_frame_key = f"live-best-{uuid.uuid4().hex}.jpg"
-        target_path = storage_dir / best_frame_key
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(target_path), best_frame)
+        success, enc = cv2.imencode(".jpg", best_frame)
+        if success:
+            from app.core.config import write_storage_bytes
+            write_storage_bytes(best_frame_key, enc.tobytes())
+        else:
+            target_path = storage_dir / best_frame_key
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(target_path), best_frame)
 
     status = "PASS" if challenge_passed else "FAIL"
 

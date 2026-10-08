@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from fastapi import APIRouter, Header, HTTPException, Depends
-from app.core.config import settings, resolve_storage_path
+from app.core.config import settings, resolve_storage_path, read_storage_bytes, write_storage_bytes
 from app.schemas.vision_dto import (
     NicExtractionRequest, NicExtractionResponse,
     BiometricAnalysisRequest, BiometricAnalysisResponse,
@@ -9,7 +9,7 @@ from app.schemas.vision_dto import (
     DocumentDetail, QualityDetail, FieldValue, PortraitDetail, ProviderDetail
 )
 from app.providers.quality_provider import assess_image_quality
-from app.providers.ocr_provider import extract_nic_text, is_tesseract_available
+from app.providers.ocr_provider import extract_nic_text, is_tesseract_available, is_ocr_available, rapid_engine
 from app.providers.face_provider import extract_document_portrait
 from app.providers.liveness_provider import analyze_video_liveness
 from app.providers.compare_provider import compare_face_images
@@ -31,6 +31,8 @@ def health_ready():
         storage_root.mkdir(parents=True, exist_ok=True)
     return {
         "status": "ready",
+        "ocrAvailable": is_ocr_available(),
+        "rapidOcrActive": rapid_engine is not None,
         "tesseractInstalled": is_tesseract_available()
     }
 
@@ -39,22 +41,26 @@ def get_capabilities():
     manifest_file = Path(settings.model_manifest_path)
     if manifest_file.exists():
         with open(manifest_file, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            if "models" in data and "ocr" in data["models"]:
+                data["models"]["ocr"]["status"] = "READY" if is_ocr_available() else "UNAVAILABLE"
+                data["models"]["ocr"]["engine"] = "RapidOCR (ONNX) + Tesseract" if rapid_engine is not None else "Tesseract OCR"
+            return data
     return {
-        "ocr": {"engine": "Tesseract", "status": "READY" if is_tesseract_available() else "UNAVAILABLE"},
+        "ocr": {"engine": "RapidOCR (ONNX)", "status": "READY" if is_ocr_available() else "UNAVAILABLE"},
         "liveness": {"movement": "OpenCV Temporal", "pad": "UNKNOWN"}
     }
 
 @router.post("/v1/nic/extract", response_model=NicExtractionResponse, dependencies=[Depends(verify_internal_secret)])
 def extract_nic(req: NicExtractionRequest):
     storage_root = Path(settings.evidence_storage_path)
-    front_path = resolve_storage_path(req.frontStorageKey) if req.frontStorageKey else None
+    if not req.frontStorageKey:
+        raise HTTPException(status_code=400, detail="frontStorageKey is required")
 
-    if not front_path or not front_path.exists():
+    try:
+        image_bytes = read_storage_bytes(req.frontStorageKey)
+    except Exception:
         raise HTTPException(status_code=404, detail="Front image evidence not found in storage")
-
-    with open(front_path, "rb") as f:
-        image_bytes = f.read()
 
     # Image quality check
     quality_res = assess_image_quality(image_bytes)
@@ -92,15 +98,28 @@ def extract_nic(req: NicExtractionRequest):
         fields=formatted_fields,
         portrait=portrait_detail,
         warnings=all_warnings,
-        provider=ProviderDetail(name="tesseract-ocr", version="5.x")
+        provider=ProviderDetail(name="rapidocr-onnx" if rapid_engine else "tesseract-ocr", version="1.4.4" if rapid_engine else "5.x")
     )
 
 @router.post("/v1/biometrics/analyze", response_model=BiometricAnalysisResponse, dependencies=[Depends(verify_internal_secret)])
 def analyze_biometrics(req: BiometricAnalysisRequest):
     storage_root = Path(settings.evidence_storage_path)
-    video_path = resolve_storage_path(req.videoStorageKey)
+    try:
+        video_bytes = read_storage_bytes(req.videoStorageKey)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Video evidence not found in storage")
 
-    result = analyze_video_liveness(video_path, req.expectedChallengeSteps, storage_root)
+    temp_video = storage_root / f".dec_{req.videoStorageKey}"
+    try:
+        with open(temp_video, "wb") as f:
+            f.write(video_bytes)
+        result = analyze_video_liveness(temp_video, req.expectedChallengeSteps, storage_root)
+    finally:
+        if temp_video.exists():
+            try:
+                temp_video.unlink()
+            except Exception:
+                pass
 
     return BiometricAnalysisResponse(
         attemptId=req.attemptId,
@@ -115,10 +134,28 @@ def analyze_biometrics(req: BiometricAnalysisRequest):
 
 @router.post("/v1/faces/compare", response_model=FaceComparisonResponse, dependencies=[Depends(verify_internal_secret)])
 def compare_faces(req: FaceComparisonRequest):
-    portrait_path = resolve_storage_path(req.portraitStorageKey)
-    live_frame_path = resolve_storage_path(req.liveFrameStorageKey)
+    storage_root = Path(settings.evidence_storage_path)
+    try:
+        p1_bytes = read_storage_bytes(req.portraitStorageKey)
+        p2_bytes = read_storage_bytes(req.liveFrameStorageKey)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Face evidence not found in storage: {str(e)}")
 
-    result = compare_face_images(portrait_path, live_frame_path, req.calibratedThreshold)
+    temp_p1 = storage_root / f".dec_{req.portraitStorageKey}"
+    temp_p2 = storage_root / f".dec_{req.liveFrameStorageKey}"
+    try:
+        with open(temp_p1, "wb") as f:
+            f.write(p1_bytes)
+        with open(temp_p2, "wb") as f:
+            f.write(p2_bytes)
+        result = compare_face_images(temp_p1, temp_p2, req.calibratedThreshold)
+    finally:
+        for t in [temp_p1, temp_p2]:
+            if t.exists():
+                try:
+                    t.unlink()
+                except Exception:
+                    pass
 
     return FaceComparisonResponse(
         requestId=req.requestId,

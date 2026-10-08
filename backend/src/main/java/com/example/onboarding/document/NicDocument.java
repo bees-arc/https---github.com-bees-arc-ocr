@@ -12,18 +12,18 @@ public class NicDocument {
     @Id
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "application_id", nullable = false)
     private Application application;
 
     @Column(nullable = false)
     private int generation;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "front_evidence_id")
     private EvidenceObject frontEvidence;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "back_evidence_id")
     private EvidenceObject backEvidence;
 

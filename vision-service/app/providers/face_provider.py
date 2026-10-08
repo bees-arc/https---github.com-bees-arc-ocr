@@ -36,8 +36,13 @@ def extract_document_portrait(image_bytes: bytes, storage_dir: Path) -> dict:
     cropped = img[y1:y2, x1:x2]
 
     storage_key = f"portrait-{uuid.uuid4().hex}.jpg"
-    target_path = storage_dir / storage_key
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(target_path), cropped)
+    success, enc = cv2.imencode(".jpg", cropped)
+    if success:
+        from app.core.config import write_storage_bytes
+        write_storage_bytes(storage_key, enc.tobytes())
+    else:
+        target_path = storage_dir / storage_key
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(target_path), cropped)
 
     return {"status": "FOUND", "portraitStorageKey": storage_key}

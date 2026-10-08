@@ -28,6 +28,12 @@ public class GlobalExceptionHandler {
         return buildProblem("urn:onboarding:problem:state-conflict", "State Conflict", HttpStatus.CONFLICT, "STATE_CONFLICT", ex.getMessage());
     }
 
+    @ExceptionHandler({jakarta.persistence.OptimisticLockException.class, org.springframework.orm.ObjectOptimisticLockingFailureException.class})
+    public ResponseEntity<Map<String, Object>> handleOptimisticLock(Exception ex) {
+        log.warn("Optimistic lock conflict: {}", ex.getMessage());
+        return buildProblem("urn:onboarding:problem:stale-version", "Stale Version Conflict", HttpStatus.CONFLICT, "STATE_CONFLICT", "The resource was modified concurrently or has a stale version. Please reload and retry.");
+    }
+
     @ExceptionHandler(SecurityException.class)
     public ResponseEntity<Map<String, Object>> handleForbidden(SecurityException ex) {
         log.warn("Forbidden: {}", ex.getMessage());
