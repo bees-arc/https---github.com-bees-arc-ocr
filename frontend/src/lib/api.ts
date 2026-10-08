@@ -38,7 +38,9 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    let errorDetail = `HTTP ${response.status}`;
+    let errorDetail = response.status === 403 || response.status === 401
+      ? "Session expired or unauthorized (HTTP " + response.status + "). Please log in again."
+      : `HTTP ${response.status}`;
     try {
       const errorJson = await response.json();
       errorDetail = errorJson.detail || errorJson.title || errorJson.code || errorDetail;

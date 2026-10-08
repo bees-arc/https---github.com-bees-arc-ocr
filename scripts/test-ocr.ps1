@@ -1,3 +1,7 @@
+param(
+    [string]$FrontCard = "tools\real_test_card.jpg"
+)
+
 # scripts/test-ocr.ps1: Verify End-to-End Real OCR Upload, Processing & Field Extraction
 $ErrorActionPreference = "Stop"
 
@@ -14,8 +18,8 @@ $app = Invoke-RestMethod -Uri "$baseUrl/applications" -Method Post -Headers $hea
 $appId = $app.id
 Write-Host "Application created: $appId (Version: $($app.version))" -ForegroundColor Green
 
-Write-Host "3. Uploading realistic test NIC document images..." -ForegroundColor Cyan
-$frontPath = Resolve-Path "tools\real_test_card.jpg"
+Write-Host "3. Uploading realistic test NIC document images: $FrontCard..." -ForegroundColor Cyan
+$frontPath = Resolve-Path $FrontCard
 $backPath = Resolve-Path "tools\real_test_card_back.jpg"
 
 $curlArgs = @(

@@ -169,19 +169,21 @@ public class NicController {
 
         Map<String, Object> fieldMap = new HashMap<>();
         for (ExtractedField f : fields) {
-            fieldMap.put(f.getFieldName(), Map.of(
-                    "value", encryptionService.decryptDatabaseField(f.getNormalizedValueEncrypted()),
-                    "confidence", f.getConfidence() != null ? f.getConfidence() : 0.0,
-                    "script", f.getScript() != null ? f.getScript() : "eng"
-            ));
+            String decryptedValue = encryptionService.decryptDatabaseField(f.getNormalizedValueEncrypted());
+            Map<String, Object> item = new HashMap<>();
+            item.put("value", decryptedValue != null ? decryptedValue : "");
+            item.put("confidence", f.getConfidence() != null ? f.getConfidence() : 0.0);
+            item.put("script", f.getScript() != null ? f.getScript() : "eng");
+            fieldMap.put(f.getFieldName(), item);
         }
 
-        return ResponseEntity.ok(Map.of(
-                "generation", doc.getGeneration(),
-                "processingStatus", doc.getProcessingStatus().name(),
-                "layout", doc.getLayout() != null ? doc.getLayout().name() : "UNKNOWN",
-                "fields", fieldMap
-        ));
+        Map<String, Object> response = new HashMap<>();
+        response.put("generation", doc.getGeneration());
+        response.put("processingStatus", doc.getProcessingStatus().name());
+        response.put("layout", doc.getLayout() != null ? doc.getLayout().name() : "UNKNOWN");
+        response.put("fields", fieldMap);
+
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/confirm")
@@ -261,8 +263,6 @@ public class NicController {
         confirmed.setConfirmedAt(OffsetDateTime.now());
         confirmed.setDocument(doc);
         confirmedIdentityRepository.save(confirmed);
-
-        applicationRepository.save(application);
 
         auditService.recordEvent(application.getId(), user.getId(), "NIC_CONFIRMED", confirmed.getId().toString(), "canonical=" + canonicalNic.replaceAll("[0-9]", "*"), null);
 

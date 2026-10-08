@@ -182,8 +182,17 @@ export default function ConfirmPage() {
         </div>
 
         {error && (
-          <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl">
-            {error}
+          <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl space-y-2">
+            <p>{error}</p>
+            {error.includes('403') || error.includes('Session expired') || error.includes('unauthorized') ? (
+              <button
+                type="button"
+                onClick={() => router.push('/auth/login')}
+                className="inline-block px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-xs font-semibold rounded-lg transition"
+              >
+                Go to Login →
+              </button>
+            ) : null}
           </div>
         )}
 
