@@ -24,11 +24,11 @@ public class BiometricAttempt {
     @JoinColumn(name = "challenge_id", nullable = false)
     private CameraChallenge challenge;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinColumn(name = "video_evidence_id")
     private EvidenceObject videoEvidence;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinColumn(name = "best_frame_evidence_id")
     private EvidenceObject bestFrameEvidence;
 

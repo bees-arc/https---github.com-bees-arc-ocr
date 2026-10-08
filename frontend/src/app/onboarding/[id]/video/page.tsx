@@ -16,7 +16,8 @@ import {
   Smile,
   AlertCircle,
   Sparkles,
-  Zap
+  Zap,
+  CreditCard
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 
@@ -32,6 +33,16 @@ const STEP_DEFINITIONS: Record<string, { label: string; instruction: string; ico
     label: 'Blink Naturally',
     instruction: 'Look directly at the camera and blink your eyes naturally',
     icon: Eye,
+  },
+  SHOW_ID_CARD: {
+    label: 'Hold NIC to Camera',
+    instruction: 'Hold your physical ID card next to your face inside the frame',
+    icon: CreditCard,
+  },
+  HOLD_NIC: {
+    label: 'Hold NIC to Camera',
+    instruction: 'Hold your physical ID card next to your face inside the frame',
+    icon: CreditCard,
   },
   TURN_LEFT: {
     label: 'Turn Head Left',
@@ -379,13 +390,25 @@ export default function VideoLivenessPage() {
               </div>
 
               {/* Central Biometric Oval Guide */}
-              <div
-                className={`w-64 h-80 rounded-[50%] border-4 transition-all duration-300 ${
-                  recording
-                    ? 'border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.5)] animate-pulse'
-                    : 'border-emerald-400/80 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
-                }`}
-              />
+              <div className="relative flex items-center justify-center">
+                <div
+                  className={`w-64 h-80 rounded-[50%] border-4 transition-all duration-300 ${
+                    recording
+                      ? 'border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.5)] animate-pulse'
+                      : 'border-emerald-400/80 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
+                  }`}
+                />
+
+                {/* Physical Card Guide Box when SHOW_ID_CARD is active */}
+                {recording && (currentStepKey === 'SHOW_ID_CARD' || currentStepKey === 'HOLD_NIC') && (
+                  <div className="absolute -right-24 top-1/2 -translate-y-1/2 w-28 h-20 rounded-2xl border-2 border-dashed border-amber-400 bg-amber-500/20 backdrop-blur-md flex flex-col items-center justify-center p-2 text-center animate-bounce shadow-lg shadow-amber-500/20">
+                    <CreditCard className="w-6 h-6 text-amber-300 mb-1" />
+                    <span className="text-[10px] font-extrabold text-amber-200 uppercase tracking-tight leading-none">
+                      Hold NIC Here
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Bottom Timer or Action */}
               {recording ? (

@@ -26,10 +26,11 @@ public class ChallengeGenerator {
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(nonceBytes);
         String nonceHash = hashNonce(nonce);
 
-        // Pick 2 random distinct challenge actions from TURN_LEFT, TURN_RIGHT, BLINK
-        List<ChallengeStep> allSteps = new ArrayList<>(List.of(ChallengeStep.values()));
-        Collections.shuffle(allSteps, secureRandom);
-        List<ChallengeStep> selectedSteps = allSteps.subList(0, 2);
+        // Provide a robust fintech sequence: BLINK, SHOW_ID_CARD, and a directional head movement
+        List<ChallengeStep> selectedSteps = new ArrayList<>();
+        selectedSteps.add(ChallengeStep.BLINK);
+        selectedSteps.add(ChallengeStep.SHOW_ID_CARD);
+        selectedSteps.add(secureRandom.nextBoolean() ? ChallengeStep.TURN_LEFT : ChallengeStep.TURN_RIGHT);
 
         OffsetDateTime expiresAt = OffsetDateTime.now().plusSeconds(90);
 

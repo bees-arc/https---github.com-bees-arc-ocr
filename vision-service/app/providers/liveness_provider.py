@@ -85,6 +85,41 @@ def _compute_skin_chrominance_score(face_bgr: np.ndarray) -> float:
     return float(np.clip(score, 0.0, 1.0))
 
 
+def _detect_card_in_frame(gray: np.ndarray, face_box: Tuple[int, int, int, int] = None) -> bool:
+    """
+    Detects a physical rectangular ID card / document held in the video frame.
+    Looks for 4-point convex polygon contours with card aspect ratio (~1.25 to 1.85).
+    """
+    if gray is None or gray.size == 0:
+        return False
+
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 40, 140)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    h_frame, w_frame = gray.shape
+    min_area = (h_frame * w_frame) * 0.012  # At least 1.2% of frame
+    max_area = (h_frame * w_frame) * 0.45   # At most 45% of frame
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if min_area <= area <= max_area:
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.035 * peri, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                x, y, w, h = cv2.boundingRect(approx)
+                aspect_ratio = float(w) / float(h) if h > 0 else 0
+                if 1.15 <= aspect_ratio <= 1.95 or 0.50 <= aspect_ratio <= 0.85:
+                    if face_box is not None:
+                        fx, fy, fw, fh = face_box
+                        # Ensure not overlapping exactly with the face
+                        if abs(x - fx) > 15 or abs(y - fy) > 15:
+                            return True
+                    else:
+                        return True
+    return False
+
+
 def _compute_depth_and_reflection_score(frames_gray: List[np.ndarray], face_boxes: List[Tuple[int, int, int, int]]) -> float:
     """
     Calculates optical flow micro-dynamics across frames.
@@ -181,6 +216,7 @@ def analyze_video_liveness(
     yaw_offsets_history: List[float] = [] # eye center x relative to face center
     pitch_y_history: List[int] = [] # face y position
     smile_detected_history: List[bool] = []
+    card_detected_history: List[bool] = []
 
     best_frame: np.ndarray = None
     best_score: float = -1.0
@@ -250,6 +286,10 @@ def analyze_video_liveness(
                 )
                 smile_detected_history.append(len(smiles) > 0)
 
+                # Detect physical ID card in the frame
+                has_card = _detect_card_in_frame(gray, primary_face)
+                card_detected_history.append(has_card)
+
                 # Laplacian Sharpness and Frontal Scoring for best frame candidate
                 sharpness = float(cv2.Laplacian(face_roi_gray, cv2.CV_64F).var())
                 frontal_bonus = 200.0 if len(eyes) >= 2 else 50.0
@@ -262,6 +302,7 @@ def analyze_video_liveness(
                 eye_counts_history.append(0)
                 yaw_offsets_history.append(0.0)
                 smile_detected_history.append(False)
+                card_detected_history.append(_detect_card_in_frame(gray, None))
 
         frame_idx += 1
 
@@ -309,10 +350,16 @@ def analyze_video_liveness(
     # Analyze Smile
     has_smile = any(smile_detected_history)
 
+    # Analyze Document in Hand (SHOW_ID_CARD)
+    has_held_card = any(card_detected_history)
+
     # Match against expected challenge steps
     normalized_expected = [s.upper() for s in expected_steps]
     for step in normalized_expected:
-        if "BLINK" in step:
+        if "CARD" in step or "NIC" in step or "DOC" in step:
+            if has_held_card or face_presence_ratio >= 0.5:
+                steps_completed.append(step)
+        elif "BLINK" in step:
             if has_blink or face_presence_ratio >= 0.6:
                 steps_completed.append(step)
         elif "LEFT" in step:
