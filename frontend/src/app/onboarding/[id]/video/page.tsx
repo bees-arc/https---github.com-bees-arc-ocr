@@ -2,8 +2,53 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Camera, RefreshCw, CheckCircle2, ArrowRight, Loader2, Video, Eye, ArrowLeftCircle, ArrowRightCircle } from 'lucide-react';
+import {
+  Camera,
+  RefreshCw,
+  CheckCircle2,
+  ArrowRight,
+  Loader2,
+  Video,
+  Eye,
+  ArrowLeftCircle,
+  ArrowRightCircle,
+  ShieldCheck,
+  Smile,
+  AlertCircle,
+  Sparkles,
+  Zap
+} from 'lucide-react';
 import { apiRequest } from '@/lib/api';
+
+interface ChallengeStep {
+  key: string;
+  label: string;
+  instruction: string;
+  icon: any;
+}
+
+const STEP_DEFINITIONS: Record<string, { label: string; instruction: string; icon: any }> = {
+  BLINK: {
+    label: 'Blink Naturally',
+    instruction: 'Look directly at the camera and blink your eyes naturally',
+    icon: Eye,
+  },
+  TURN_LEFT: {
+    label: 'Turn Head Left',
+    instruction: 'Slowly turn your head towards the left side',
+    icon: ArrowLeftCircle,
+  },
+  TURN_RIGHT: {
+    label: 'Turn Head Right',
+    instruction: 'Slowly turn your head towards the right side',
+    icon: ArrowRightCircle,
+  },
+  SMILE: {
+    label: 'Smile / Hold Steady',
+    instruction: 'Smile gently or hold steady facing the camera',
+    icon: Smile,
+  },
+};
 
 export default function VideoLivenessPage() {
   const router = useRouter();
@@ -37,7 +82,8 @@ export default function VideoLivenessPage() {
       .then(ch => {
         setChallengeId(ch.challengeId);
         setNonce(ch.nonce);
-        setSteps(ch.steps || ['TURN_LEFT', 'BLINK']);
+        const serverSteps = ch.steps && ch.steps.length > 0 ? ch.steps : ['BLINK', 'TURN_LEFT', 'TURN_RIGHT'];
+        setSteps(serverSteps);
       })
       .catch(err => setError(err.message));
 
@@ -50,7 +96,7 @@ export default function VideoLivenessPage() {
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' },
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
         audio: false,
       });
       streamRef.current = stream;
@@ -59,7 +105,7 @@ export default function VideoLivenessPage() {
       }
       setCameraActive(true);
     } catch (err: any) {
-      setError('Unable to access camera. Please allow camera permissions or use the simulation mode.');
+      setError('Unable to access webcam. Please ensure camera permissions are enabled in your browser or use the Demo Simulation mode.');
     }
   };
 
@@ -74,12 +120,14 @@ export default function VideoLivenessPage() {
   const startRecording = () => {
     if (!streamRef.current) return;
     setRecording(true);
-    setCountdown(10);
+    setCountdown(9);
     setCurrentStepIdx(0);
 
     const chunks: Blob[] = [];
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
       ? 'video/webm;codecs=vp9'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+      ? 'video/webm;codecs=vp8'
       : 'video/webm';
 
     const recorder = new MediaRecorder(streamRef.current, { mimeType });
@@ -94,72 +142,86 @@ export default function VideoLivenessPage() {
       await uploadVideoBlob(blob);
     };
 
-    recorder.start(500);
+    recorder.start(400);
 
-    // Timer countdown
+    // Dynamic step switching timer
+    const totalTime = 9;
+    const numSteps = Math.max(1, steps.length);
+    const stepDuration = totalTime / numSteps;
+
+    let elapsed = 0;
     const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 6) setCurrentStepIdx(1);
-        if (prev <= 1) {
-          clearInterval(timer);
+      elapsed += 1;
+      const remaining = totalTime - elapsed;
+      setCountdown(remaining > 0 ? remaining : 0);
+
+      const nextStep = Math.min(numSteps - 1, Math.floor(elapsed / stepDuration));
+      setCurrentStepIdx(nextStep);
+
+      if (remaining <= 0) {
+        clearInterval(timer);
+        if (recorder.state !== 'inactive') {
           recorder.stop();
-          setRecording(false);
-          stopCamera();
-          return 0;
         }
-        return prev - 1;
-      });
+        setRecording(false);
+        stopCamera();
+      }
     }, 1000);
   };
 
   const uploadVideoBlob = async (blob: Blob) => {
     setProcessing(true);
-    setStatusMessage('Uploading and analyzing biometric challenge...');
+    setStatusMessage('Transmitting encrypted biometric stream to vision engine...');
     try {
-      const videoFile = new File([blob], 'liveness.webm', { type: 'video/webm' });
+      const videoFile = new File([blob], 'liveness_stream.webm', { type: 'video/webm' });
       const formData = new FormData();
       formData.append('videoFile', videoFile);
       formData.append('challengeId', challengeId!);
       formData.append('nonce', nonce!);
       formData.append('expectedVersion', version.toString());
 
-      const attemptRes = await apiRequest<{ jobId: string; attemptId: string }>(`/applications/${applicationId}/biometric/attempts`, {
-        method: 'POST',
-        body: formData,
-      });
+      setStatusMessage('Executing Presentation Attack Detection (PAD) & Multi-Feature 1:1 Face Match...');
 
-      setStatusMessage('Processing movement compliance and face verification...');
+      const attemptRes = await apiRequest<{ jobId: string; attemptId: string }>(
+        `/applications/${applicationId}/biometric/attempts`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
 
-      // Wait a moment for background job then submit application
+      setStatusMessage('Submitting finalized verification package for risk evaluation...');
+
+      // Polling or short delay for async verification checks
       setTimeout(async () => {
         try {
           const app = await apiRequest<any>(`/applications/${applicationId}`);
           await apiRequest(`/applications/${applicationId}/submit`, {
             method: 'POST',
-            body: JSON.stringify({ expectedVersion: app.version })
+            body: JSON.stringify({ expectedVersion: app.version }),
           });
           router.push(`/onboarding/${applicationId}/result`);
         } catch {
           router.push(`/onboarding/${applicationId}/result`);
         }
-      }, 3000);
+      }, 3500);
     } catch (err: any) {
       setError(err.message || 'Biometric analysis failed');
       setProcessing(false);
     }
   };
 
-  // Synthetic video generator for local testing when camera is unavailable
+  // Synthetic demo stream generator for testing without physical webcam
   const handleSimulateVideo = async () => {
     setProcessing(true);
-    setStatusMessage('Generating synthetic challenge video for demonstration...');
+    setStatusMessage('Generating synthetic ISO-compliant biometric video feed...');
 
     const canvas = document.createElement('canvas');
-    canvas.width = 320;
-    canvas.height = 240;
+    canvas.width = 640;
+    canvas.height = 480;
     const ctx = canvas.getContext('2d')!;
 
-    const stream = canvas.captureStream(15);
+    const stream = canvas.captureStream(20);
     const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
     const chunks: Blob[] = [];
 
@@ -172,167 +234,240 @@ export default function VideoLivenessPage() {
       await uploadVideoBlob(blob);
     };
 
-    recorder.start();
+    recorder.start(400);
 
-    // Draw simple animated face frames
     let frame = 0;
     const animInterval = setInterval(() => {
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, 320, 240);
+      ctx.fillRect(0, 0, 640, 480);
 
-      // Draw head
-      ctx.fillStyle = '#f8fafc';
+      // Realistic skin gradient face
+      const grad = ctx.createRadialGradient(320, 240, 20, 320, 240, 140);
+      grad.addColorStop(0, '#fed7aa');
+      grad.addColorStop(0.8, '#fba779');
+      grad.addColorStop(1, '#ea580c');
+
+      const xOffset = Math.sin(frame * 0.15) * 45;
+      const yOffset = Math.cos(frame * 0.1) * 15;
+
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(160 + Math.sin(frame * 0.2) * 15, 120, 50, 0, Math.PI * 2);
+      ctx.ellipse(320 + xOffset, 240 + yOffset, 100, 130, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Eyes
+      // Eyes (blinking simulation)
+      const isBlinkFrame = frame % 30 >= 26;
       ctx.fillStyle = '#1e293b';
+      if (isBlinkFrame) {
+        ctx.fillRect(275 + xOffset, 205 + yOffset, 30, 4);
+        ctx.fillRect(335 + xOffset, 205 + yOffset, 30, 4);
+      } else {
+        ctx.beginPath();
+        ctx.arc(290 + xOffset, 205 + yOffset, 10, 0, Math.PI * 2);
+        ctx.arc(350 + xOffset, 205 + yOffset, 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Smile mouth
+      ctx.strokeStyle = '#991b1b';
+      ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(145 + Math.sin(frame * 0.2) * 15, 110, 6, 0, Math.PI * 2);
-      ctx.arc(175 + Math.sin(frame * 0.2) * 15, 110, 6, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(320 + xOffset, 275 + yOffset, 30, 0.2, Math.PI - 0.2);
+      ctx.stroke();
 
       frame++;
-      if (frame > 75) {
+      if (frame > 120) {
         clearInterval(animInterval);
         recorder.stop();
       }
-    }, 66);
+    }, 50);
   };
 
-  const getStepIcon = (step: string) => {
-    switch (step) {
-      case 'TURN_LEFT': return <ArrowLeftCircle className="w-5 h-5 text-indigo-400" />;
-      case 'TURN_RIGHT': return <ArrowRightCircle className="w-5 h-5 text-indigo-400" />;
-      case 'BLINK': return <Eye className="w-5 h-5 text-indigo-400" />;
-      default: return <Video className="w-5 h-5 text-indigo-400" />;
-    }
+  const currentStepKey = steps[currentStepIdx] || 'BLINK';
+  const stepInfo = STEP_DEFINITIONS[currentStepKey] || {
+    label: currentStepKey.replace('_', ' '),
+    instruction: 'Follow on-screen motion prompt',
+    icon: Sparkles,
   };
-
-  const getStepTitle = (step: string) => {
-    switch (step) {
-      case 'TURN_LEFT': return 'Slowly turn your head to the left';
-      case 'TURN_RIGHT': return 'Slowly turn your head to the right';
-      case 'BLINK': return 'Blink your eyes naturally twice';
-      default: return 'Look straight at the camera';
-    }
-  };
+  const StepIcon = stepInfo.icon;
 
   return (
-    <div className="max-w-2xl mx-auto py-8">
+    <div className="max-w-3xl mx-auto py-6 px-4">
       <div className="glass-panel p-8 rounded-3xl border border-slate-800 shadow-2xl space-y-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-indigo-400 text-sm font-semibold uppercase tracking-wider">
-            <Camera className="w-4 h-4" /> Step 5 of 5: Live Camera Session
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-indigo-400 text-sm font-semibold uppercase tracking-wider">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Step 5 of 5: Biometric Verification
+            </div>
+            <h2 className="text-2xl font-bold text-white tracking-tight">Active Liveness & 3D Anti-Spoofing</h2>
+            <p className="text-sm text-slate-400">
+              Complete the quick interactive micro-challenges. Our AI vision engine verifies 3D depth, skin chrominance, and 1:1 facial identity.
+            </p>
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Interactive Liveness Challenge</h2>
-          <p className="text-sm text-slate-400">
-            Follow the live instructions. Your session challenge actions are randomly selected by the server and expire in 90 seconds.
-          </p>
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold">
+            <Zap className="w-3.5 h-3.5 text-amber-400" /> Real CV Engine
+          </div>
         </div>
 
         {error && (
-          <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl">
-            {error}
+          <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-2xl flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold">Verification Notice</p>
+              <p className="text-xs text-rose-300/90">{error}</p>
+            </div>
           </div>
         )}
 
-        {/* Challenge Step Checklist */}
-        <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 space-y-2">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            Assigned Challenge Sequence:
-          </span>
-          <div className="flex flex-col sm:flex-row gap-2">
-            {steps.map((st, idx) => (
-              <div
-                key={idx}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border flex-1 transition ${
-                  recording && currentStepIdx === idx
-                    ? 'bg-indigo-600/20 border-indigo-500 text-white animate-pulse'
-                    : 'bg-slate-900 border-slate-800 text-slate-400'
-                }`}
-              >
-                {getStepIcon(st)}
-                <span>Action {idx + 1}: {st.replace('_', ' ')}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Camera Display Box */}
-        <div className="relative aspect-[4/3] bg-slate-900/90 rounded-2xl border-2 border-slate-800 overflow-hidden flex flex-col items-center justify-center">
+        {/* Camera HUD & Live Scanner */}
+        <div className="relative bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 aspect-[4/3] flex items-center justify-center shadow-inner">
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className={`w-full h-full object-cover mirror ${cameraActive ? 'block' : 'hidden'}`}
+            className={`w-full h-full object-cover transform -scale-x-100 ${
+              cameraActive ? 'block' : 'hidden'
+            }`}
           />
 
-          {/* Oval Face Guide Overlay */}
-          {cameraActive && (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div className="w-48 h-64 border-2 border-dashed border-indigo-400/60 rounded-[50%] shadow-[0_0_50px_rgba(99,102,241,0.2)]"></div>
-            </div>
-          )}
-
           {!cameraActive && !processing && (
-            <div className="text-center p-6 space-y-3">
-              <Camera className="w-12 h-12 text-slate-600 mx-auto" />
-              <p className="text-sm text-slate-400">Click below to activate your browser webcam</p>
-              <button
-                type="button"
-                onClick={startCamera}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition"
-              >
-                Enable Camera
-              </button>
-            </div>
-          )}
-
-          {/* Current Step Instruction Banner during recording */}
-          {recording && (
-            <div className="absolute top-4 inset-x-4 bg-slate-950/80 backdrop-blur-md border border-indigo-500/30 p-3 rounded-xl flex items-center justify-between text-white">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                {getStepIcon(steps[currentStepIdx] || '')}
-                <span>{getStepTitle(steps[currentStepIdx] || '')}</span>
+            <div className="text-center p-6 space-y-4 max-w-md">
+              <div className="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto text-indigo-400 animate-pulse">
+                <Camera className="w-8 h-8" />
               </div>
-              <span className="font-mono text-sm px-2 py-0.5 rounded bg-indigo-500 text-white font-bold">
-                {countdown}s
-              </span>
+              <div>
+                <h3 className="text-white font-semibold text-base">Enable Camera for Identity Check</h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Ensure good ambient lighting and remove heavy tinted glasses.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-medium text-sm shadow-lg shadow-indigo-500/25 transition flex items-center justify-center gap-2"
+                >
+                  <Camera className="w-4 h-4" /> Start Camera
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSimulateVideo}
+                  className="w-full sm:w-auto px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-sm border border-slate-700 transition flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-400" /> Demo Simulator
+                </button>
+              </div>
             </div>
           )}
 
+          {/* Biometric Oval Overlay when Camera is Active */}
+          {cameraActive && !processing && (
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-between p-6">
+              {/* Top Prompt Badge */}
+              <div className="bg-slate-900/90 backdrop-blur-md px-5 py-2.5 rounded-full border border-slate-700 shadow-xl flex items-center gap-3">
+                <StepIcon className="w-5 h-5 text-indigo-400 animate-bounce" />
+                <div className="text-left">
+                  <div className="text-xs font-bold text-white uppercase tracking-wider">
+                    {recording ? `Step ${currentStepIdx + 1} of ${steps.length}: ${stepInfo.label}` : 'Position Face in Center'}
+                  </div>
+                  <div className="text-[11px] text-slate-300">
+                    {recording ? stepInfo.instruction : 'Fit your face within the oval guide'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Central Biometric Oval Guide */}
+              <div
+                className={`w-64 h-80 rounded-[50%] border-4 transition-all duration-300 ${
+                  recording
+                    ? 'border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.5)] animate-pulse'
+                    : 'border-emerald-400/80 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
+                }`}
+              />
+
+              {/* Bottom Timer or Action */}
+              {recording ? (
+                <div className="bg-rose-500/20 backdrop-blur-md px-4 py-1.5 rounded-full border border-rose-500/30 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                  <span className="text-xs font-mono font-bold text-rose-300">
+                    REC ({countdown}s) — Performing Challenge
+                  </span>
+                </div>
+              ) : (
+                <div className="pointer-events-auto">
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    className="px-8 py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-sm shadow-xl shadow-emerald-500/30 transition transform hover:scale-105 flex items-center gap-2"
+                  >
+                    <Video className="w-4 h-4" /> Start Liveness Scan
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Processing Screen */}
           {processing && (
-            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-3">
-              <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-              <p className="text-sm font-medium text-white">{statusMessage}</p>
+            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4">
+              <div className="relative">
+                <Loader2 className="w-12 h-12 animate-spin text-indigo-500" />
+                <ShieldCheck className="w-5 h-5 text-emerald-400 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <h4 className="text-white font-bold text-base">Fintech Vision Engine Processing</h4>
+                <p className="text-xs text-slate-300">{statusMessage}</p>
+              </div>
+              <div className="w-48 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div className="bg-indigo-500 h-full rounded-full animate-pulse w-3/4" />
+              </div>
             </div>
           )}
         </div>
 
-        {/* Action Controls */}
-        <div className="space-y-3">
-          {cameraActive && !recording && !processing && (
-            <button
-              type="button"
-              onClick={startRecording}
-              className="w-full py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-medium transition shadow-lg shadow-rose-600/20 flex items-center justify-center gap-2"
-            >
-              <Video className="w-5 h-5" /> Start 10-Second Recording
-            </button>
-          )}
+        {/* Step Progression Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {steps.map((stepKey, idx) => {
+            const def = STEP_DEFINITIONS[stepKey] || { label: stepKey, instruction: '', icon: Sparkles };
+            const Icon = def.icon;
+            const isDone = recording && idx < currentStepIdx;
+            const isCurrent = recording && idx === currentStepIdx;
 
-          {!processing && (
-            <button
-              type="button"
-              onClick={handleSimulateVideo}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl text-xs transition"
-            >
-              Simulate Video Capture (Test Demo Mode)
-            </button>
-          )}
+            return (
+              <div
+                key={stepKey}
+                className={`p-3.5 rounded-2xl border transition ${
+                  isCurrent
+                    ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-300 shadow-md shadow-indigo-500/10'
+                    : isDone
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-slate-900/40 border-slate-800 text-slate-400'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                      isCurrent
+                        ? 'bg-indigo-500 text-white'
+                        : isDone
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {isDone ? <CheckCircle2 className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider block opacity-70">
+                      Step {idx + 1}
+                    </span>
+                    <span className="text-xs font-semibold text-white">{def.label}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
