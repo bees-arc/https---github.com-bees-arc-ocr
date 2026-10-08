@@ -103,7 +103,6 @@ public class NicController {
 
         // Increment generation and invalidate old downstream biometric/face results
         int generation = application.incrementDocumentGeneration();
-        application.setVersion(application.getVersion() + 1);
         applicationRepository.save(application);
 
         // Store encrypted front image
@@ -263,7 +262,6 @@ public class NicController {
         confirmed.setDocument(doc);
         confirmedIdentityRepository.save(confirmed);
 
-        application.setVersion(application.getVersion() + 1);
         applicationRepository.save(application);
 
         auditService.recordEvent(application.getId(), user.getId(), "NIC_CONFIRMED", confirmed.getId().toString(), "canonical=" + canonicalNic.replaceAll("[0-9]", "*"), null);

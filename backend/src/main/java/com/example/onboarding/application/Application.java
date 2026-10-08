@@ -12,7 +12,7 @@ public class Application {
     @Id
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
@@ -39,7 +39,7 @@ public class Application {
 
     @Version
     @Column(nullable = false)
-    private int version = 0;
+    private Integer version;
 
     @Column(name = "submitted_at")
     private OffsetDateTime submittedAt;
@@ -58,7 +58,6 @@ public class Application {
         this.policyVersion = policyVersion;
         this.currentDocumentGeneration = 0;
         this.currentBiometricGeneration = 0;
-        this.version = 0;
         this.expiresAt = OffsetDateTime.now().plusDays(7);
     }
 
@@ -137,10 +136,10 @@ public class Application {
     }
 
     public int getVersion() {
-        return version;
+        return version != null ? version : 0;
     }
 
-    public void setVersion(int version) {
+    public void setVersion(Integer version) {
         this.version = version;
     }
 

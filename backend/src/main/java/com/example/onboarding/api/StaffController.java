@@ -211,8 +211,7 @@ public class StaffController {
         DecisionOutcome previousDecision = app.getDecision();
         app.setDecision(dto.decision());
         app.setLifecycle(ApplicationLifecycle.COMPLETED);
-        app.setVersion(app.getVersion() + 1);
-        applicationRepository.save(app);
+        app = applicationRepository.save(app);
 
         ReviewCase reviewCase = reviewCaseRepository.findByApplicationId(app.getId())
                 .orElse(new ReviewCase(UUID.randomUUID(), app, "MANUAL_DECISION", OffsetDateTime.now()));

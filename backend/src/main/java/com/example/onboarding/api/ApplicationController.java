@@ -139,8 +139,7 @@ public class ApplicationController {
         customer.setUpdatedAt(OffsetDateTime.now());
         customerRepository.save(customer);
 
-        application.setVersion(application.getVersion() + 1);
-        applicationRepository.save(application);
+        application = applicationRepository.save(application);
 
         auditService.recordEvent(application.getId(), user.getId(), "PROFILE_DETAILS_UPDATED", application.getId().toString(), null, null);
         return ResponseEntity.ok(toMap(application));
@@ -199,8 +198,7 @@ public class ApplicationController {
         application.setDecision(result.decision());
         application.setLifecycle(ApplicationLifecycle.COMPLETED);
         application.setSubmittedAt(OffsetDateTime.now());
-        application.setVersion(application.getVersion() + 1);
-        applicationRepository.save(application);
+        application = applicationRepository.save(application);
 
         // Open or update review case
         ReviewCase rCase = reviewCaseRepository.findByApplicationId(application.getId())
@@ -219,8 +217,7 @@ public class ApplicationController {
 
         Application application = getAuthorizedApplication(id, user);
         application.setLifecycle(ApplicationLifecycle.WITHDRAWN);
-        application.setVersion(application.getVersion() + 1);
-        applicationRepository.save(application);
+        application = applicationRepository.save(application);
 
         auditService.recordEvent(application.getId(), user.getId(), "APPLICATION_WITHDRAWN", application.getId().toString(), null, null);
         return ResponseEntity.ok(Map.of("status", "WITHDRAWN"));

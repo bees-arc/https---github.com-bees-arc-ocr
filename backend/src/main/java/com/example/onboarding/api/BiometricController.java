@@ -130,8 +130,7 @@ public class BiometricController {
         cameraChallengeRepository.save(challenge);
 
         int biometricGen = application.incrementBiometricGeneration();
-        application.setVersion(application.getVersion() + 1);
-        applicationRepository.save(application);
+        application = applicationRepository.save(application);
 
         // Store video encrypted
         EncryptedStorageService.StorageResult videoRes = storageService.storeEncrypted(videoFile.getBytes(), ".webm");

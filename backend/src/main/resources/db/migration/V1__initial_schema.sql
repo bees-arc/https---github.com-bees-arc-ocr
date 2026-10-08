@@ -208,11 +208,11 @@ CREATE TABLE idempotency_records (
     id UUID PRIMARY KEY,
     actor_id UUID,
     route VARCHAR(255) NOT NULL,
-    key VARCHAR(255) NOT NULL,
+    "key" VARCHAR(255) NOT NULL,
     request_hash VARCHAR(128) NOT NULL,
     safe_response TEXT NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    CONSTRAINT uk_idempotency_actor_route_key UNIQUE (actor_id, route, key)
+    CONSTRAINT uk_idempotency_actor_route_key UNIQUE (actor_id, route, "key")
 );
 
 CREATE TABLE policy_versions (

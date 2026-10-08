@@ -12,6 +12,7 @@ import com.example.onboarding.security.OtpChallengeRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -59,7 +60,7 @@ public class AuthController {
     }
 
     public record RequestOtpDto(@NotBlank String contactLookup) {}
-    public record VerifyOtpDto(@NotBlank UUID challengeId, @NotBlank String otpCode) {}
+    public record VerifyOtpDto(@NotNull UUID challengeId, @NotBlank String otpCode) {}
     public record StaffLoginDto(@NotBlank String username, @NotBlank String password) {}
 
     @PostMapping("/otp/request")

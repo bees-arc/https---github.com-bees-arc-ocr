@@ -13,7 +13,7 @@ public class ReviewCase {
     @Id
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "application_id", nullable = false)
     private Application application;
 
@@ -35,7 +35,7 @@ public class ReviewCase {
 
     @Version
     @Column(nullable = false)
-    private int version = 0;
+    private Integer version;
 
     public ReviewCase() {}
 
@@ -45,7 +45,6 @@ public class ReviewCase {
         this.reasonCodes = reasonCodes;
         this.state = "OPEN";
         this.openedAt = openedAt;
-        this.version = 0;
     }
 
     public UUID getId() {
@@ -105,10 +104,10 @@ public class ReviewCase {
     }
 
     public int getVersion() {
-        return version;
+        return version != null ? version : 0;
     }
 
-    public void setVersion(int version) {
+    public void setVersion(Integer version) {
         this.version = version;
     }
 }

@@ -48,7 +48,7 @@ public class ConfirmedIdentity {
 
     @Version
     @Column(nullable = false)
-    private int version = 0;
+    private Integer version;
 
     public ConfirmedIdentity() {}
 
@@ -64,7 +64,6 @@ public class ConfirmedIdentity {
         this.nicLookupHmac = nicLookupHmac;
         this.confirmedAt = confirmedAt;
         this.confirmedBy = confirmedBy;
-        this.version = 0;
     }
 
     public UUID getId() {
@@ -156,10 +155,10 @@ public class ConfirmedIdentity {
     }
 
     public int getVersion() {
-        return version;
+        return version != null ? version : 0;
     }
 
-    public void setVersion(int version) {
+    public void setVersion(Integer version) {
         this.version = version;
     }
 }
